@@ -15,6 +15,9 @@ from models.person import PersonCreate, PersonRead, PersonUpdate
 from models.address import AddressCreate, AddressRead, AddressUpdate
 from models.health import Health
 
+from models.owner import OwnerCreate, OwnerRead, OwnerUpdate
+from models.pet import PetCreate, PetRead, PetUpdate
+
 port = int(os.environ.get("FASTAPIPORT", 8000))
 
 # -----------------------------------------------------------------------------
@@ -22,6 +25,9 @@ port = int(os.environ.get("FASTAPIPORT", 8000))
 # -----------------------------------------------------------------------------
 persons: Dict[UUID, PersonRead] = {}
 addresses: Dict[UUID, AddressRead] = {}
+owners: Dict[UUID, OwnerRead] = {}
+pets: Dict[UUID, PetRead] = {}
+# -----------------------------------------------------------------------------
 
 app = FastAPI(
     title="Person/Address API",
@@ -158,6 +164,120 @@ def update_person(person_id: UUID, update: PersonUpdate):
     stored.update(update.model_dump(exclude_unset=True))
     persons[person_id] = PersonRead(**stored)
     return persons[person_id]
+
+# -----------------------------------------------------------------------------
+# Owner endpoints
+# -----------------------------------------------------------------------------
+@app.post("/owners", response_model=OwnerRead, status_code=201)
+def create_owner(owner: OwnerCreate):
+    # Each owner gets its own UUID; stored as OwnerRead
+    owner_read = OwnerRead(**owner.model_dump())
+    owners[owner_read.id] = owner_read
+    return owner_read
+
+@app.get("/owners", response_model=List[OwnerRead])
+def list_owners(
+    first_name: Optional[str] = Query(None, description="Filter by first name"),
+    last_name: Optional[str] = Query(None, description="Filter by last name"),
+    email: Optional[str] = Query(None, description="Filter by email"),
+    phone: Optional[str] = Query(None, description="Filter by phone number"),
+    birth_date: Optional[str] = Query(None, description="Filter by date of birth (YYYY-MM-DD)"),
+    city: Optional[str] = Query(None, description="Filter by city of at least one address"),
+    country: Optional[str] = Query(None, description="Filter by country of at least one address"),
+):
+    results = list(owners.values())
+
+    if first_name is not None:
+        results = [o for o in results if o.first_name == first_name]
+    if last_name is not None:
+        results = [o for o in results if o.last_name == last_name]
+    if email is not None:
+        results = [o for o in results if o.email == email]
+    if phone is not None:
+        results = [o for o in results if o.phone == phone]
+    if birth_date is not None:
+        results = [o for o in results if str(o.birth_date) == birth_date]
+
+    # nested address filtering
+    if city is not None:
+        results = [o for o in results if any(addr.city == city for addr in o.addresses)]
+    if country is not None:
+        results = [o for o in results if any(addr.country == country for addr in o.addresses)]
+
+    return results
+
+@app.get("/owners/{owner_id}", response_model=OwnerRead)
+def get_owner(owner_id: UUID):
+    if owner_id not in owners:
+        raise HTTPException(status_code=404, detail="Owner not found")
+    return owners[owner_id]
+
+@app.patch("/owners/{owner_id}", response_model=OwnerRead)
+def update_owner(owner_id: UUID, update: OwnerUpdate):
+    if owner_id not in owners:
+        raise HTTPException(status_code=404, detail="Owner not found")
+    stored = owners[owner_id].model_dump()
+    stored.update(update.model_dump(exclude_unset=True))
+    owners[owner_id] = OwnerRead(**stored)
+    return owners[owner_id]
+
+@app.delete("/owners/{owner_id}", status_code=204)
+def delete_owner(owner_id: UUID):
+    if owner_id not in owners:
+        raise HTTPException(status_code=404, detail="Owner not found")
+    del owners[owner_id]
+    return None
+
+
+# -----------------------------------------------------------------------------
+# Pet endpoints
+# -----------------------------------------------------------------------------
+@app.post("/pets", response_model=PetRead, status_code=201)
+def create_pet(pet: PetCreate):
+    # Each pet gets its own UUID; stored as PetRead
+    pet_read = PetRead(**pet.model_dump())
+    pets[pet_read.id] = pet_read
+    return pet_read     
+@app.get("/pets", response_model=List[PetRead])
+def list_pets(
+    name: Optional[str] = Query(None, description="Filter by pet name"),
+    species: Optional[str] = Query(None, description="Filter by species"),
+    age: Optional[int] = Query(None, description="Filter by age"),
+    weight: Optional[float] = Query(None, description="Filter by weight"),
+):
+    results = list(pets.values())
+
+    if name is not None:
+        results = [p for p in results if p.name == name]
+    if species is not None:
+        results = [p for p in results if p.species == species]
+    if age is not None:
+        results = [p for p in results if p.age == age]
+    if weight is not None:
+        results = [p for p in results if p.weight == weight]
+
+    return results  
+@app.get("/pets/{pet_id}", response_model=PetRead)
+def get_pet(pet_id: UUID):
+    if pet_id not in pets:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    return pets[pet_id]     
+@app.patch("/pets/{pet_id}", response_model=PetRead)
+def update_pet(pet_id: UUID, update: PetUpdate):        
+    if pet_id not in pets:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    stored = pets[pet_id].model_dump()
+    stored.update(update.model_dump(exclude_unset=True))
+    pets[pet_id] = PetRead(**stored)
+    return pets[pet_id]
+@app.delete("/pets/{pet_id}", status_code=204)
+def delete_pet(pet_id: UUID):
+    if pet_id not in pets:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    del pets[pet_id]
+    return None     
+
+    
 
 # -----------------------------------------------------------------------------
 # Root
